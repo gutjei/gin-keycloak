@@ -192,7 +192,7 @@ func Test_RoleAccess_invalid_role(t *testing.T) {
 		authFunc(ctx)
 
 		assert.True(t, len(ctx.Errors) == 1)
-		assert.Equal(t, "Access to the Resource is forbidden", ctx.Errors[0].Err.Error())
+		assert.Equal(t, "access to the Resource is forbidden", ctx.Errors[0].Err.Error())
 	}
 }
 
@@ -207,7 +207,7 @@ func Test_RealmAccess_invalid_realm(t *testing.T) {
 		authFunc(ctx)
 
 		assert.True(t, len(ctx.Errors) == 1)
-		assert.Equal(t, "Access to the Resource is forbidden", ctx.Errors[0].Err.Error())
+		assert.Equal(t, "access to the Resource is forbidden", ctx.Errors[0].Err.Error())
 	}
 }
 
@@ -221,7 +221,7 @@ func Test_UidAccess_invalid_uid(t *testing.T) {
 		authFunc(ctx)
 
 		assert.True(t, len(ctx.Errors) == 1)
-		assert.Equal(t, "Access to the Resource is forbidden", ctx.Errors[0].Err.Error())
+		assert.Equal(t, "access to the Resource is forbidden", ctx.Errors[0].Err.Error())
 	}
 }
 
@@ -283,7 +283,7 @@ func Test_Auth_no_config(t *testing.T) {
 		authFunc(ctx)
 
 		assert.True(t, len(ctx.Errors) == 1)
-		assert.Equal(t, "Access to the Resource is forbidden", ctx.Errors[0].Err.Error())
+		assert.Equal(t, "access to the Resource is forbidden", ctx.Errors[0].Err.Error())
 	}
 }
 
@@ -300,7 +300,7 @@ func Test_Auth_all_invalid(t *testing.T) {
 		authFunc(ctx)
 
 		assert.True(t, len(ctx.Errors) == 1)
-		assert.Equal(t, "Access to the Resource is forbidden", ctx.Errors[0].Err.Error())
+		assert.Equal(t, "access to the Resource is forbidden", ctx.Errors[0].Err.Error())
 	}
 }
 
