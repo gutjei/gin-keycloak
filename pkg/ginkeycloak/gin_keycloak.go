@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang/glog"
 	"github.com/patrickmn/go-cache"
 	"golang.org/x/oauth2"
 	"gopkg.in/square/go-jose.v2/jwt"
@@ -31,6 +29,13 @@ type TokenContainer struct {
 	Token         *oauth2.Token
 	KeyCloakToken *KeyCloakToken
 }
+
+var (
+	ErrorNoContext    = errors.New("no token in context")
+	ErrorInvalidToken = errors.New("invalid Token")
+	ErrorForbidden    = errors.New("access to the Resource is forbidden")
+	ErrorTimeout      = errors.New("authorization check overtime")
+)
 
 func extractToken(r *http.Request) (*oauth2.Token, error) {
 	hdr := r.Header.Get("Authorization")
@@ -131,10 +136,9 @@ func getPublicKeyFromCacheOrBackend(keyId string, config KeycloakConfig) (KeyEnt
 		return KeyEntry{}, err
 	}
 	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
 
 	var certs Certs
-	err = json.Unmarshal(body, &certs)
+	err = json.NewDecoder(resp.Body).Decode(&certs)
 	if err != nil {
 		return KeyEntry{}, err
 	}
@@ -155,25 +159,25 @@ func decodeToken(token *oauth2.Token, config KeycloakConfig) (*KeyCloakToken, er
 	var err error
 	parsedJWT, err := jwt.ParseSigned(token.AccessToken)
 	if err != nil {
-		glog.Errorf("[Gin-OAuth] jwt not decodable: %s", err)
+		//glog.Errorf("[Gin-OAuth] jwt not decodable: %s", err)
 		return nil, err
 	}
 	key, err := getPublicKey(parsedJWT.Headers[0].KeyID, config)
 	if err != nil {
-		glog.Errorf("Failed to get publickey %v", err)
+		//glog.Errorf("Failed to get publickey %v", err)
 		return nil, err
 	}
 
 	err = parsedJWT.Claims(key, &keyCloakToken)
 	if err != nil {
-		glog.Errorf("Failed to get claims JWT:%+v", err)
+		//glog.Errorf("Failed to get claims JWT:%+v", err)
 		return nil, err
 	}
 
 	if config.CustomClaimsMapper != nil {
 		err = config.CustomClaimsMapper(parsedJWT, &keyCloakToken)
 		if err != nil {
-			glog.Errorf("Failed to get custom claims JWT:%+v", err)
+			//glog.Errorf("Failed to get custom claims JWT:%+v", err)
 			return nil, err
 		}
 	}
@@ -196,21 +200,21 @@ func getTokenContainer(ctx *gin.Context, config KeycloakConfig) (*TokenContainer
 	var err error
 
 	if oauthToken, err = extractToken(ctx.Request); err != nil {
-		glog.Errorf("[Gin-OAuth] Can not extract oauth2.Token, caused by: %s", err)
+		//glog.Errorf("[Gin-OAuth] Can not extract oauth2.Token, caused by: %s", err)
 		return nil, false
 	}
 	if !oauthToken.Valid() {
-		glog.Infof("[Gin-OAuth] Invalid Token - nil or expired")
+		//glog.Infof("[Gin-OAuth] Invalid Token - nil or expired")
 		return nil, false
 	}
 
 	if tc, err = GetTokenContainer(oauthToken, config); err != nil {
-		glog.Errorf("[Gin-OAuth] Can not extract TokenContainer, caused by: %s", err)
+		//glog.Errorf("[Gin-OAuth] Can not extract TokenContainer, caused by: %s", err)
 		return nil, false
 	}
 
 	if isExpired(tc.KeyCloakToken) {
-		glog.Errorf("[Gin-OAuth] Keycloak Token has expired")
+		//glog.Errorf("[Gin-OAuth] Keycloak Token has expired")
 		return nil, false
 	}
 
@@ -240,19 +244,18 @@ func Auth(accessCheckFunction AccessCheckFunction, endpoints KeycloakConfig) gin
 func authChain(config KeycloakConfig, accessCheckFunctions ...AccessCheckFunction) gin.HandlerFunc {
 	// middleware
 	return func(ctx *gin.Context) {
-		t := time.Now()
 		varianceControl := make(chan bool, 1)
 
 		go func() {
 			tokenContainer, ok := getTokenContainer(ctx, config)
 			if !ok {
-				_ = ctx.AbortWithError(http.StatusUnauthorized, errors.New("No token in context"))
+				_ = ctx.AbortWithError(http.StatusUnauthorized, ErrorNoContext)
 				varianceControl <- false
 				return
 			}
 
 			if !tokenContainer.Valid() {
-				_ = ctx.AbortWithError(http.StatusUnauthorized, errors.New("Invalid Token"))
+				_ = ctx.AbortWithError(http.StatusUnauthorized, ErrorInvalidToken)
 				varianceControl <- false
 				return
 			}
@@ -263,7 +266,7 @@ func authChain(config KeycloakConfig, accessCheckFunctions ...AccessCheckFunctio
 					return
 				}
 			}
-			_ = ctx.AbortWithError(http.StatusForbidden, errors.New("Access to the Resource is forbidden"))
+			_ = ctx.AbortWithError(http.StatusForbidden, ErrorForbidden)
 			varianceControl <- false
 			return
 		}()
@@ -271,16 +274,16 @@ func authChain(config KeycloakConfig, accessCheckFunctions ...AccessCheckFunctio
 		select {
 		case ok := <-varianceControl:
 			if !ok {
-				glog.V(2).Infof("[Gin-OAuth] %12v %s access not allowed", time.Since(t), ctx.Request.URL.Path)
+				//glog.V(2).Infof("[Gin-OAuth] %12v %s access not allowed", time.Since(t), ctx.Request.URL.Path)
 				return
 			}
 		case <-time.After(VarianceTimer):
-			_ = ctx.AbortWithError(http.StatusGatewayTimeout, errors.New("Authorization check overtime"))
-			glog.V(2).Infof("[Gin-OAuth] %12v %s overtime", time.Since(t), ctx.Request.URL.Path)
+			_ = ctx.AbortWithError(http.StatusGatewayTimeout, ErrorTimeout)
+			//glog.V(2).Infof("[Gin-OAuth] %12v %s overtime", time.Since(t), ctx.Request.URL.Path)
 			return
 		}
 
-		glog.V(2).Infof("[Gin-OAuth] %12v %s access allowed", time.Since(t), ctx.Request.URL.Path)
+		//glog.V(2).Infof("[Gin-OAuth] %12v %s access allowed", time.Since(t), ctx.Request.URL.Path)
 	}
 }
 
@@ -290,7 +293,7 @@ func RequestLogger(keys []string, contentKey string) gin.HandlerFunc {
 		c.Next()
 		err := c.Errors
 		if request.Method != "GET" && err == nil {
-			data, e := c.Get(contentKey)
+			_, e := c.Get(contentKey)
 			if e != false { //key is non existent
 				values := make([]string, 0)
 				for _, key := range keys {
@@ -299,7 +302,7 @@ func RequestLogger(keys []string, contentKey string) gin.HandlerFunc {
 						values = append(values, val.(string))
 					}
 				}
-				glog.Infof("[Gin-OAuth] Request: %+v for %s", data, strings.Join(values, "-"))
+				//glog.Infof("[Gin-OAuth] Request: %+v for %s", data, strings.Join(values, "-"))
 			}
 		}
 	}

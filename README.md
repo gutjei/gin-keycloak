@@ -32,14 +32,12 @@ Gin-Keycloak uses the following [Go](https://golang.org/) packages as
 dependencies:
 
 * [Gin](https://github.com/gin-gonic/gin)
-* [glog](https://github.com/golang/glog)
-* [gin-glog](https://github.com/szuecs/gin-glog)
 
 ## Installation
 
 Assuming you've installed Go and Gin, run this:
 
-    go get github.com/tbaehler/gin-keycloak
+    go get github.com/gutjei/gin-keycloak
 
 ## Usage
 
@@ -50,9 +48,7 @@ With this function you just check if user is authenticated. Therefore there is n
 Gin middlewares you use:
 
     router := gin.New()
-    router.Use(ginglog.Logger(3 * time.Second))
     router.Use(ginkeycloak.RequestLogger([]string{"uid"}, "data"))
-    router.Use(gin.Recovery())
 
 A Keycloakconfig. You can either use URL and Realm or define a fullpath that point to protocol/openid-connect/certs
 
@@ -192,12 +188,6 @@ Currently, are only "EC" (which uses keycloak by default) and "RS" supported
         ginToken,_ := context.Get("token")
         token := ginToken.(ginkeycloak.KeyCloakToken)
 
-
-## Contributors
-
-Thanks to:
-
-- Zalando Team for their initial work
 
 ## License
 
